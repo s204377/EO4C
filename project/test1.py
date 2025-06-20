@@ -28,7 +28,7 @@ plot_boundaries = {
 }
 
 def plot_contour(plot_boundaries, grid_lat, grid_lon, wind_array,
-                   title='Placeholder Title', vmin=0, vmax=10, cmap='viridis'):
+                   label='Wind Speed (m/s)', vmin=0, vmax=10, cmap='viridis'):
     plt.figure(figsize=(12, 5))
     ax = plt.axes(projection=ccrs.PlateCarree())
     mesh = plt.pcolormesh(
@@ -37,10 +37,11 @@ def plot_contour(plot_boundaries, grid_lat, grid_lon, wind_array,
         vmin=vmin, vmax=vmax
     )
     ax.coastlines()
-    plt.colorbar(mesh, ax=ax, orientation='vertical', label='ERA5 Wind Speed (m/s)')
-    plt.title(title)
+    cbar = plt.colorbar(mesh, ax=ax, orientation='vertical')
+    cbar.ax.tick_params(labelsize=14)
+    cbar.set_label(label, fontsize=16)
     plt.xlim(plot_boundaries['min_lon'], plot_boundaries['max_lon'])
-    plt.ylim(plot_boundaries['min_lat'], plot_boundaries['max_lat'])    
+    plt.ylim(plot_boundaries['min_lat'], plot_boundaries['max_lat'])
     plt.show()
 
 # Lists to collect lat, lon, and wind data
@@ -147,7 +148,9 @@ mesh = plt.pcolormesh(grid_lon, grid_lat, grid_speed_mean, cmap='viridis',
                       shading='auto', transform=ccrs.PlateCarree(),
                       vmin=0, vmax=10)
 ax.coastlines()
-plt.colorbar(mesh, ax=ax, orientation='vertical', label='Wind Speed (m/s)')
+cbar = plt.colorbar(mesh, ax=ax, orientation='vertical')
+cbar.ax.tick_params(labelsize=14)
+cbar.set_label('Wind Speed (m/s)', fontsize=16)
 plt.xlim(plot_boundaries['min_lon'], plot_boundaries['max_lon'])
 plt.ylim(plot_boundaries['min_lat'], plot_boundaries['max_lat'])
 plt.show()
@@ -171,7 +174,10 @@ for grb in tqdm(grbs, desc="Processing GRIB messages"):
     })
 grb_lat, grb_lon = grbs[1].latlons()
 depth_lat, depth_lon = grbs[3].latlons()
-
+era5_bathymetry = np.asarray(grbs[3].values, dtype=float)
+era5_bathymetry[era5_bathymetry == 9999] = np.nan  # Set land areas to NaN
+plot_contour(plot_boundaries, depth_lat, depth_lon, era5_bathymetry,
+             label='Water depth (m)', vmin=0, vmax=1000, cmap='Blues')
 df = (
     pd.DataFrame(data)
     .assign(
@@ -206,7 +212,6 @@ ERA5_df = ERA5_df.drop(columns=['10u', '10v'])
 
 ERA5_df['mag_unsmoothed'] = ERA5_df['mag'].copy()
 plot_contour(plot_boundaries, grb_lat, grb_lon, ERA5_df['mag_unsmoothed'].mean(),
-               title='Mean Wind Speed from ERA5 Data (April 2025)',
                vmin=0, vmax=10, cmap='viridis')
 
 # Interpolate the wind speed onto the common grid (grid_lon, grid_lat)
@@ -219,7 +224,6 @@ ERA5_df['mag'] = ERA5_df['mag'].apply(
 
 # Plotting the mean wind speed on a map
 plot_contour(plot_boundaries, grid_lat, grid_lon, ERA5_df['mag'].mean(),
-               title='Mean Wind Speed from ERA5 Data (April 2025)',
                 vmin=0, vmax=10, cmap='viridis')
 
 
@@ -263,30 +267,30 @@ era5_mean_full = np.nanmean(era5_arrays_full, axis=0)
 
 
 plot_contour(plot_boundaries, grid_lat, grid_lon, ERA5_df['mag_masked'].mean(),
-               title='Mean ERA5 Wind Speed (April 2025) - Masked by SAR Data')
+             label='Wind Speed (m/s)')
 
 # Plotting the comparison of SAR and ERA5 wind speeds
 plot_contour(plot_boundaries, grid_lat, grid_lon, sar_mean,
-               title='Mean SAR Wind Speed (April 2025)')
+             label='Wind Speed (m/s)')
 plot_contour(plot_boundaries, grid_lat, grid_lon, sar_ascending_mean,
-               title='Mean SAR Wind Speed (Ascending Passes, April 2025)')
+             label='Wind Speed (m/s)')
 plot_contour(plot_boundaries, grid_lat, grid_lon, sar_descending_mean,
-               title='Mean SAR Wind Speed (Descending Passes, April 2025)')
+             label='Wind Speed (m/s)')
 plot_contour(plot_boundaries, grid_lat, grid_lon, era5_mean,
-               title='Mean ERA5 Wind Speed (April 2025)')
+             label='Wind Speed (m/s)')
 plot_contour(plot_boundaries, grid_lat, grid_lon, era5_ascending_mean,
-               title='Mean ERA5 Wind Speed (Ascending Passes, April 2025)')
+             label='Wind Speed (m/s)')
 plot_contour(plot_boundaries, grid_lat, grid_lon, era5_descending_mean,
-               title='Mean ERA5 Wind Speed (Descending Passes, April 2025)')    
+             label='Wind Speed (m/s)')
 
 
 # Plotting the comparison of SAR and ERA5 wind speeds
 plot_contour(plot_boundaries, grid_lat, grid_lon, sar_mean - era5_mean,
-               title='Mean Difference in Wind Speed (SAR - ERA5) (April 2025)',
+               label='Wind Speed Difference (m/s)',
                vmin=-3, vmax=3, cmap='RdBu_r')
 
 plot_contour(plot_boundaries, grid_lat, grid_lon, era5_mean - era5_mean_full,
-               title='Mean Difference in Wind Speed (ERA5 - ERA5 Full Month) (April 2025)',
+               label='Wind Speed Difference (m/s)',
                vmin=-3, vmax=3, cmap='RdBu_r')
 
 # %% Process bathymetry data
@@ -302,8 +306,8 @@ depth_lon = depth_dataset.variables['lon'][:]
 depth_lon, depth_lat = np.meshgrid(depth_lon, depth_lat)
 
 # plot the bathymetry data
-plot_contour(plot_boundaries, depth_lat, depth_lon, depth,
-               title='Bathymetry Data (GEBCO)', vmin=-1000, vmax=0, cmap='Blues_r')
+plot_contour(plot_boundaries, depth_lat, depth_lon, -depth,
+               label='Water depth (m)', vmin=0, vmax=1000, cmap='Blues')
 
 
 # Interpolate the bathymetry data onto the SAR grid
@@ -311,9 +315,8 @@ depth_interpolated = griddata(
     (depth_lon.flatten(), depth_lat.flatten()), depth.flatten(),
     (grid_lon, grid_lat), method='linear'
 )
-plot_contour(plot_boundaries, grid_lat, grid_lon, depth_interpolated,
-               title='Interpolated Bathymetry Data on SAR Grid',
-               vmin=-1000, vmax=0, cmap='Blues_r')
+plot_contour(plot_boundaries, grid_lat, grid_lon, -depth_interpolated,
+               label='Water depth (m)', vmin=0, vmax=1000, cmap='Blues')
 
 
 # %%
@@ -381,9 +384,8 @@ color_map = {
 ListedColormap = plt.cm.colors.ListedColormap([color_map[i] for i in range(1, 5)])
 
 # Plotting the conditional map 
-def plot_conditional_map(plot_boundaries, grid_lat, grid_lon, sar_map, ListedColormap,
-                         title='Conditional Map Based on Wind Speed and Bathymetry'):
-    plt.figure(figsize=(12, 8))
+def plot_conditional_map(plot_boundaries, grid_lat, grid_lon, sar_map, ListedColormap):
+    plt.figure(figsize=(12, 7))
     ax = plt.axes(projection=ccrs.PlateCarree())
     total_points = np.count_nonzero(~np.isnan(sar_map))
     cond1_count = np.count_nonzero(sar_map == 1)
@@ -396,17 +398,17 @@ def plot_conditional_map(plot_boundaries, grid_lat, grid_lon, sar_map, ListedCol
         shading='auto', transform=ccrs.PlateCarree(),
         vmin=0.5, vmax=4.5)
     ax.coastlines()
-    plt.title(title)
     plt.xlim(plot_boundaries['min_lon'], plot_boundaries['max_lon'])
     plt.ylim(plot_boundaries['min_lat'], plot_boundaries['max_lat'])
-    cbar = plt.colorbar(mesh, ax=ax, orientation='horizontal', label='Conditions')
+    cbar = plt.colorbar(mesh, ax=ax, orientation='horizontal')
     cbar.set_ticks([1, 2, 3, 4])
     cbar.set_ticklabels([
     f'Low Wind Speed\n& Deep Water ({cond1_count/total_points:.1%})',
     f'Low Wind Speed\n& Shallow Depth ({cond2_count/total_points:.1%})',
     f'High Wind Speed\n& Deep Water ({cond3_count/total_points:.1%})',
-    f'High Wind Speed\n& Shallow Depth ({cond4_count/total_points:.1%})'
-])
+    f'High Wind Speed\n& Shallow Depth ({cond4_count/total_points:.1%})'])
+    cbar.ax.tick_params(labelsize=14)
+    plt.xlabel('Longitude')
     plt.tight_layout()
     plt.show()
 
@@ -556,10 +558,11 @@ plt.plot(x_grid, kde1(x_grid), label='SAR - ERA5', color='blue')
 plt.plot(x_grid, kde2(x_grid), label='Corrected SAR - ERA5', color='orange')
 plt.plot(x_grid, kde3(x_grid), label='Corrected SAR - SAR', color='green')
 plt.plot(x_grid, kde4(x_grid), label='Corrected SAR - SAR without Bias', color='red')
-plt.xlabel('Error (m/s)')
-plt.ylabel('Probability Density')
-plt.title('Error Distributions (PDF): SAR vs ERA5 and Corrected SAR vs ERA5')
-plt.legend()
+plt.xlabel('Error (m/s)', fontsize=16)
+plt.tick_params(axis='both', which='major', labelsize=16)
+plt.ylabel('Probability Density', fontsize=16)
+plt.xlim(-4, 4)
+plt.legend(fontsize=14)
 plt.grid(True)
 plt.tight_layout()
 plt.show()
